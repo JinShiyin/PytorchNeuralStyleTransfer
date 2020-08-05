@@ -1,7 +1,7 @@
 # %%
 
-% pylab
-inline
+# % pylab
+# inline
 import time
 import os
 
@@ -140,77 +140,92 @@ if torch.cuda.is_available():
 
 # %%
 
-# load images, ordered as [style_image, content_image]
-img_dirs = [image_dir, image_dir]
-img_names = ['vangogh_starry_night.jpg', 'Tuebingen_Neckarfront.jpg']
-imgs = [Image.open(img_dirs[i] + name) for i, name in enumerate(img_names)]
-imgs_torch = [prep(img) for img in imgs]
-if torch.cuda.is_available():
-    imgs_torch = [Variable(img.unsqueeze(0).cuda()) for img in imgs_torch]
-else:
-    imgs_torch = [Variable(img.unsqueeze(0)) for img in imgs_torch]
-style_image, content_image = imgs_torch
+# # load images, ordered as [style_image, content_image]
+# img_dirs = [image_dir, image_dir]
+# img_names = ['vangogh_starry_night.jpg', 'Tuebingen_Neckarfront.jpg']
+# imgs = [Image.open(img_dirs[i] + name) for i, name in enumerate(img_names)]
+# imgs_torch = [prep(img) for img in imgs]
+# if torch.cuda.is_available():
+#     imgs_torch = [Variable(img.unsqueeze(0).cuda()) for img in imgs_torch]
+# else:
+#     imgs_torch = [Variable(img.unsqueeze(0)) for img in imgs_torch]
+# style_image, content_image = imgs_torch
 
-# opt_img = Variable(torch.randn(content_image.size()).type_as(content_image.data), requires_grad=True) #random init
-opt_img = Variable(content_image.data.clone(), requires_grad=True)
+c_dir = '/data/jsy/code/MAST/data/default_data/content'
+s_dir = '/data/jsy/code/MAST/data/default_data/style'
+c_name_list = os.listdir(c_dir)
+c_name_list.sort()
+s_name_list = os.listdir(s_dir)
+s_name_list.sort()
 
-# %%
+for c_name in c_name_list:
+    c_path = os.path.join(c_dir, c_name)
+    for s_name in s_name_list:
+        s_path = os.path.join(s_dir, s_name)
+        print(f'processing [{c_path}] and [{s_path}]')
+        c_img = Image.open(c_path).resize((512, 512))
+        s_img = Image.open(s_path).resize((512, 512))
+        c_img_torch = prep(c_img)
+        s_img_torch = prep(s_img)
+        content_image = Variable(c_img_torch.unsqueeze(0).cuda())
+        style_image = Variable(s_img_torch.unsqueeze(0).cuda())
 
-# # display images
-# for img in imgs:
-#     imshow(img);
-#     show()
+        # opt_img = Variable(torch.randn(content_image.size()).type_as(content_image.data), requires_grad=True) #random init
+        opt_img = Variable(content_image.data.clone(), requires_grad=True)
 
-# %%
+        # define layers, loss functions, weights and compute optimization targets
+        style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
+        content_layers = ['r42']
+        loss_layers = style_layers + content_layers
+        loss_fns = [GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
+        if torch.cuda.is_available():
+            loss_fns = [loss_fn.cuda() for loss_fn in loss_fns]
 
-# define layers, loss functions, weights and compute optimization targets
-style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
-content_layers = ['r42']
-loss_layers = style_layers + content_layers
-loss_fns = [GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
-if torch.cuda.is_available():
-    loss_fns = [loss_fn.cuda() for loss_fn in loss_fns]
+        # these are good weights settings:
+        style_weights = [1e3 / n ** 2 for n in [64, 128, 256, 512, 512]]
+        content_weights = [1e0]
+        weights = style_weights + content_weights
 
-# these are good weights settings:
-style_weights = [1e3 / n ** 2 for n in [64, 128, 256, 512, 512]]
-content_weights = [1e0]
-weights = style_weights + content_weights
+        # compute optimization targets
+        style_targets = [GramMatrix()(A).detach() for A in vgg(style_image, style_layers)]
+        content_targets = [A.detach() for A in vgg(content_image, content_layers)]
+        targets = style_targets + content_targets
 
-# compute optimization targets
-style_targets = [GramMatrix()(A).detach() for A in vgg(style_image, style_layers)]
-content_targets = [A.detach() for A in vgg(content_image, content_layers)]
-targets = style_targets + content_targets
+        # %%
 
-# %%
+        # run style transfer
+        max_iter = 500
+        show_iter = 50
+        optimizer = optim.LBFGS([opt_img]);
+        n_iter = [0]
 
-# run style transfer
-max_iter = 500
-show_iter = 50
-optimizer = optim.LBFGS([opt_img]);
-n_iter = [0]
+        while n_iter[0] <= max_iter:
 
-while n_iter[0] <= max_iter:
-
-    def closure():
-        optimizer.zero_grad()
-        out = vgg(opt_img, loss_layers)
-        layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a, A in enumerate(out)]
-        loss = sum(layer_losses)
-        loss.backward()
-        n_iter[0] += 1
-        # print loss
-        if n_iter[0] % show_iter == (show_iter - 1):
-            print('Iteration: %d, loss: %f' % (n_iter[0] + 1, loss.item()))
-        #             print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
-        return loss
+            def closure():
+                optimizer.zero_grad()
+                out = vgg(opt_img, loss_layers)
+                layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a, A in enumerate(out)]
+                loss = sum(layer_losses)
+                loss.backward()
+                n_iter[0] += 1
+                # print loss
+                if n_iter[0] % show_iter == (show_iter - 1):
+                    print('Iteration: %d, loss: %f' % (n_iter[0] + 1, loss.item()))
+                #             print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
+                return loss
 
 
-    optimizer.step(closure)
+            optimizer.step(closure)
 
-# display result
-out_img = postp(opt_img.data[0].cpu().squeeze())
-# imshow(out_img)
-# gcf().set_size_inches(10, 10)
+        # display result
+        out_img = postp(opt_img.data[0].cpu().squeeze())
+        c_basename = os.path.splitext(c_name)[0]
+        s_basename = os.path.splitext(s_name)[0]
+        out_img_path = f'./results/{c_basename}_{s_basename}.bmp'
+        out_img.save(out_img_path)
+        print(f'[{out_img_path}] saved...')
+        # imshow(out_img)
+        # gcf().set_size_inches(10, 10)
 
 # %%
 
@@ -274,5 +289,3 @@ out_img = postp(opt_img.data[0].cpu().squeeze())
 # # gcf().set_size_inches(10, 10)
 #
 # # %%
-
-

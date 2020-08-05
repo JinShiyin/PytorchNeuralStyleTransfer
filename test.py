@@ -156,10 +156,10 @@ opt_img = Variable(content_image.data.clone(), requires_grad=True)
 
 # %%
 
-# display images
-for img in imgs:
-    imshow(img);
-    show()
+# # display images
+# for img in imgs:
+#     imshow(img);
+#     show()
 
 # %%
 
@@ -209,8 +209,8 @@ while n_iter[0] <= max_iter:
 
 # display result
 out_img = postp(opt_img.data[0].cpu().squeeze())
-imshow(out_img)
-gcf().set_size_inches(10, 10)
+# imshow(out_img)
+# gcf().set_size_inches(10, 10)
 
 # %%
 
@@ -218,61 +218,61 @@ gcf().set_size_inches(10, 10)
 # "Controlling Perceptual Factors in Neural Style Transfer", Gatys et al.
 # (https://arxiv.org/abs/1611.07865)
 
-# hr preprocessing
-img_size_hr = 800  # works for 8GB GPU, make larger if you have 12GB or more
-prep_hr = transforms.Compose([transforms.Scale(img_size_hr),
-                              transforms.ToTensor(),
-                              transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])]),  # turn to BGR
-                              transforms.Normalize(mean=[0.40760392, 0.45795686, 0.48501961],  # subtract imagenet mean
-                                                   std=[1, 1, 1]),
-                              transforms.Lambda(lambda x: x.mul_(255)),
-                              ])
-# prep hr images
-imgs_torch = [prep_hr(img) for img in imgs]
-if torch.cuda.is_available():
-    imgs_torch = [Variable(img.unsqueeze(0).cuda()) for img in imgs_torch]
-else:
-    imgs_torch = [Variable(img.unsqueeze(0)) for img in imgs_torch]
-style_image, content_image = imgs_torch
-
-# now initialise with upsampled lowres result
-opt_img = prep_hr(out_img).unsqueeze(0)
-opt_img = Variable(opt_img.type_as(content_image.data), requires_grad=True)
-
-# compute hr targets
-style_targets = [GramMatrix()(A).detach() for A in vgg(style_image, style_layers)]
-content_targets = [A.detach() for A in vgg(content_image, content_layers)]
-targets = style_targets + content_targets
-
-# %%
-
-# run style transfer for high res
-max_iter_hr = 200
-optimizer = optim.LBFGS([opt_img]);
-n_iter = [0]
-while n_iter[0] <= max_iter_hr:
-
-    def closure():
-        optimizer.zero_grad()
-        out = vgg(opt_img, loss_layers)
-        layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a, A in enumerate(out)]
-        loss = sum(layer_losses)
-        loss.backward()
-        n_iter[0] += 1
-        # print loss
-        if n_iter[0] % show_iter == (show_iter - 1):
-            print('Iteration: %d, loss: %f' % (n_iter[0] + 1, loss.item()))
-        #             print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
-        return loss
-
-
-    optimizer.step(closure)
-
-# display result
-out_img_hr = postp(opt_img.data[0].cpu().squeeze())
-imshow(out_img_hr)
-gcf().set_size_inches(10, 10)
-
-# %%
+# # hr preprocessing
+# img_size_hr = 800  # works for 8GB GPU, make larger if you have 12GB or more
+# prep_hr = transforms.Compose([transforms.Scale(img_size_hr),
+#                               transforms.ToTensor(),
+#                               transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])]),  # turn to BGR
+#                               transforms.Normalize(mean=[0.40760392, 0.45795686, 0.48501961],  # subtract imagenet mean
+#                                                    std=[1, 1, 1]),
+#                               transforms.Lambda(lambda x: x.mul_(255)),
+#                               ])
+# # prep hr images
+# imgs_torch = [prep_hr(img) for img in imgs]
+# if torch.cuda.is_available():
+#     imgs_torch = [Variable(img.unsqueeze(0).cuda()) for img in imgs_torch]
+# else:
+#     imgs_torch = [Variable(img.unsqueeze(0)) for img in imgs_torch]
+# style_image, content_image = imgs_torch
+#
+# # now initialise with upsampled lowres result
+# opt_img = prep_hr(out_img).unsqueeze(0)
+# opt_img = Variable(opt_img.type_as(content_image.data), requires_grad=True)
+#
+# # compute hr targets
+# style_targets = [GramMatrix()(A).detach() for A in vgg(style_image, style_layers)]
+# content_targets = [A.detach() for A in vgg(content_image, content_layers)]
+# targets = style_targets + content_targets
+#
+# # %%
+#
+# # run style transfer for high res
+# max_iter_hr = 200
+# optimizer = optim.LBFGS([opt_img]);
+# n_iter = [0]
+# while n_iter[0] <= max_iter_hr:
+#
+#     def closure():
+#         optimizer.zero_grad()
+#         out = vgg(opt_img, loss_layers)
+#         layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a, A in enumerate(out)]
+#         loss = sum(layer_losses)
+#         loss.backward()
+#         n_iter[0] += 1
+#         # print loss
+#         if n_iter[0] % show_iter == (show_iter - 1):
+#             print('Iteration: %d, loss: %f' % (n_iter[0] + 1, loss.item()))
+#         #             print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
+#         return loss
+#
+#
+#     optimizer.step(closure)
+#
+# # display result
+# out_img_hr = postp(opt_img.data[0].cpu().squeeze())
+# # imshow(out_img_hr)
+# # gcf().set_size_inches(10, 10)
+#
+# # %%
 
 
